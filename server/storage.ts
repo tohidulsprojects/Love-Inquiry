@@ -1,14 +1,21 @@
-import { db } from "./db";
-import { interactions, type InsertInteraction } from "@shared/schema";
+import { interactions, type Interaction, type InsertInteraction } from "@shared/schema";
 
 export interface IStorage {
   createInteraction(interaction: InsertInteraction): Promise<void>;
 }
 
-export class DatabaseStorage implements IStorage {
+export class MemStorage implements IStorage {
+  private interactions: Interaction[] = [];
+  private currentId = 1;
+
   async createInteraction(insertInteraction: InsertInteraction): Promise<void> {
-    await db.insert(interactions).values(insertInteraction);
+    const interaction: Interaction = {
+      ...insertInteraction,
+      id: this.currentId++,
+      createdAt: new Date(),
+    };
+    this.interactions.push(interaction);
   }
 }
 
-export const storage = new DatabaseStorage();
+export const storage = new MemStorage();
