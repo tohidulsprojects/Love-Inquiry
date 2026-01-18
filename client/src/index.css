@@ -1,0 +1,136 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&family=Pacifico&family=Quicksand:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Fredoka', sans-serif;
+  --font-body: 'Quicksand', sans-serif;
+  --font-handwriting: 'Pacifico', cursive;
+
+  /* Romantic Pink Palette */
+  --background: 340 100% 97%;      /* Soft pinkish white */
+  --foreground: 345 80% 25%;       /* Deep berry red */
+  
+  --primary: 340 82% 52%;          /* Hot pink */
+  --primary-foreground: 340 100% 98%;
+  
+  --secondary: 330 80% 94%;        /* Pale pink */
+  --secondary-foreground: 345 80% 30%;
+  
+  --muted: 330 40% 90%;
+  --muted-foreground: 345 30% 50%;
+  
+  --accent: 350 90% 65%;           /* Soft red accent */
+  --accent-foreground: 0 0% 100%;
+  
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 340 30% 90%;
+  --input: 340 30% 90%;
+  --ring: 340 82% 52%;
+
+  --radius: 1rem;
+}
+
+.dark {
+  /* Dark mode - deeper, sexier reds */
+  --background: 345 40% 10%;
+  --foreground: 340 20% 96%;
+  
+  --primary: 340 70% 50%;
+  --primary-foreground: 0 0% 100%;
+  
+  --secondary: 345 30% 20%;
+  --secondary-foreground: 340 20% 96%;
+  
+  --muted: 345 30% 20%;
+  --muted-foreground: 340 20% 70%;
+  
+  --accent: 340 60% 40%;
+  --accent-foreground: 0 0% 100%;
+  
+  --destructive: 0 62% 30%;
+  --destructive-foreground: 0 0% 96%;
+  
+  --border: 345 30% 20%;
+  --input: 345 30% 20%;
+  --ring: 340 70% 50%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    background-image: 
+      radial-gradient(circle at 10% 20%, hsla(340, 80%, 90%, 0.4) 0%, transparent 20%),
+      radial-gradient(circle at 90% 80%, hsla(350, 80%, 90%, 0.4) 0%, transparent 20%);
+    min-height: 100vh;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply tracking-tight;
+  }
+}
+
+/* Floating hearts animation background */
+.floating-hearts {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.heart {
+  position: absolute;
+  bottom: -100px;
+  width: 20px;
+  height: 20px;
+  background-color: hsla(340, 82%, 52%, 0.2);
+  transform: rotate(45deg);
+  animation: float linear infinite;
+}
+
+.heart::before,
+.heart::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background-color: inherit;
+  border-radius: 50%;
+}
+
+.heart::before {
+  top: -10px;
+  left: 0;
+}
+
+.heart::after {
+  left: -10px;
+  top: 0;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0) rotate(45deg) scale(0.8);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-120vh) rotate(45deg) scale(1.2);
+    opacity: 0;
+  }
+}
