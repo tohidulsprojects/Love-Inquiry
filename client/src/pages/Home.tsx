@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { FloatingHearts } from "@/components/FloatingHearts";
+import { FloatingHearts } from "../components/FloatingHearts";
 import { Heart, Stars } from "lucide-react";
 
 export default function Home() {
