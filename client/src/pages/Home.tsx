@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { useCreateInteraction } from "@/hooks/use-interactions";
 import { FloatingHearts } from "@/components/FloatingHearts";
 import { Heart, Stars } from "lucide-react";
 
@@ -12,8 +11,6 @@ export default function Home() {
   const noBtnRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
-  const createInteraction = useCreateInteraction();
-
   const handleNoHover = () => {
     if (!containerRef.current || !noBtnRef.current) return;
 
@@ -62,9 +59,6 @@ export default function Home() {
 
     // Show modal
     setShowSuccess(true);
-    
-    // Record interaction
-    createInteraction.mutate({});
   };
 
   return (

@@ -1,19 +1,6 @@
 [build]
-  command = "npm install && npm run build"
+  command = "npm run build"
   publish = "dist/public"
-
-[build.environment]
-  NODE_VERSION = "20"
-
-[functions]
-  directory = "server"
-  # Exclude dev files from bundling
-  ignored_node_modules = ["vite", "esbuild"]
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/index"
-  status = 200
 
 [[redirects]]
   from = "/*"
