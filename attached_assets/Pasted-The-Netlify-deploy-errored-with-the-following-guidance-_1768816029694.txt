@@ -1,0 +1,195 @@
+The Netlify deploy errored, with the following guidance provided:
+
+Diagnosis
+
+- The Functions packager is trying to bundle vite.config.ts (via server/vite.ts) which uses top-level await and import.meta — esbuild is producing a CommonJS bundle for Netlify Functions where top-level await and import.meta are not supported. See the function list that includes vite.ts [#L82-L83] and the top-level-await errors at [#L84-L87] and [#L108-L114].
+  - Packaging includes vite.ts: [#L82].
+  - Top-level await errors: [#L84-L87] and [#L108-L114].
+  - import.meta warnings: [#L92-L96], [#L98-L101], [#L103-L106], [#L148-L151], [#L154-L156].
+
+- While bundling, esbuild also failed to resolve some packages required by dependencies:
+  - Could not resolve "@babel/preset-typescript/package.json": [#L130-L134] and [#L135-L139].
+  - Could not resolve "../pkg" from lightningcss: [#L140-L147].
+  These indicate missing/unaligned packages (or native/wasm build artifacts) that the bundler expected to find in node_modules.
+
+Cause
+- server/vite.ts (or another server function) imports/via references vite.config.ts which uses ESM-only features (top-level await, import.meta). Netlify's functions bundler targets CJS and fails when bundling that file.
+- Missing or not-installed packages (or missing native pkg for lightningcss) cause esbuild to error on resolution when bundling functions.
+
+Solution (step-by-step)
+
+1) Stop bundling vite config into Functions (recommended)
+- The simplest, lowest-risk fix is to prevent Netlify from packaging vite.ts as a function. If vite.ts is a dev/build helper, it should not live in the functions folder.
+  - Move server/vite.ts out of the server functions directory (server/) into a scripts/ or tools/ directory, or delete it if it is not needed at runtime.
+  - Repo file to check: https://github.com/tohidulsprojects/Love-Inquiry/blob/main/server/vite.ts
+  - After moving, commit the change so the functions packager no longer includes it. This will avoid bundling vite.config.ts and eliminate the top-level await / import.meta errors ([#L84-L87], [#L108-L114], [#L92-L96], [#L148-L151]).
+
+If you must keep the functionality in a function, change it to not import vite.config.ts at module level:
+- Lazy/dynamic-import inside an async handler (not top-level). Example pattern (inside server/vite.ts):
+```ts
+// TypeScript
+export const handler = async (event) => {
+  // import inside handler so bundler can avoid evaluating top-level ESM-only code at bundle time
+  const viteConfig = await import("../vite.config");
+  // use viteConfig as needed...
+};
+```
+- Ensure there is no top-level await or top-level import of vite.config.ts.
+
+2) Fix unresolved package errors
+- Verify the packages exist in your top-level package.json and were committed:
+  - Inspect package.json: https://github.com/tohidulsprojects/Love-Inquiry/blob/main/package.json
+  - Confirm that "@babel/preset-typescript" and "lightningcss" (or the package that requires ../pkg) are present. If they are missing, add them.
+
+Install (example):
+- Add @babel/preset-typescript (if required by @babel/core at build time):
+  - npm install --save-dev @babel/preset-typescript
+  - Or if required at runtime by functions, add as a dependency: npm install @babel/preset-typescript --save
+
+- Add lightningcss if your build needs it on Netlify Functions or runtime:
+  - npm install lightningcss --save
+  - If lightningcss uses a native/wasm pkg that isn't built during install in the Functions environment, you may need to use a Node-compatible replacement or mark it external (see next step).
+
+3) If a dependency cannot/should not be bundled into the function (e.g., native binaries or dev-only tools)
+- First verify the package is present in package.json and committed (see step 2).
+- If it is present but still causes bundling problems (e.g., lightningcss native pkg), consider:
+  - Removing any references to that package from your server functions (if not required at runtime), or
+  - Marking it as external in the function bundler so Netlify won't try to bundle it. Before doing this, verify the package is in package.json (required). Netlify's functions bundler doesn’t expose a direct per-project esbuild config by default, so the easiest approach is to avoid importing that module in server code (move build-only imports to scripts not packaged as functions) or switch to a build step that runs outside of Functions.
+
+Why this will fix it
+- Removing/moving vite.ts prevents Netlify from trying to bundle an ESM-only vite.config.ts into a CJS function. That eliminates the top-level await and import.meta compatibility errors reported ([#L84-L87], [#L108-L114], [#L92-L96]).
+- Installing the missing packages or removing their imports from Functions resolves the “Could not resolve” errors for "@babel/preset-typescript/package.json" and "../pkg" (lightningcss) ([#L130-L139], [#L140-L147]).
+
+If you want, I can:
+- Propose an exact git patch to move/remove server/vite.ts, or
+- Suggest exact edits in server/vite.ts to lazy-load the config.
+
+The relevant error logs are:
+
+Line 74: [96m[1m────────────────────────────────────────────────────────────────[22m[39m
+Line 75: ​
+Line 76: Packaging Functions from [36mserver[39m directory:
+Line 77:  - db.ts
+Line 78:  - index.ts
+Line 79:  - routes.ts
+Line 80:  - static.ts
+Line 81:  - storage.ts
+Line 82:  - vite.ts
+Line 83: ​
+Line 84: ✘ [ERROR] Top-level await is currently not supported with the "cjs" output format
+Line 85:     vite.config.ts:13:10:
+Line 86:       13 │           await import("@replit/vite-plugin-cartographer").then((m...
+Line 87:          ╵           ~~~~~
+Line 88: ✘ [ERROR] Top-level await is currently not supported with the "cjs" output format
+Line 89:     vite.config.ts:16:10:
+Line 90:       16 │           await import("@replit/vite-plugin-dev-banner").then((m) =>
+Line 91:          ╵           ~~~~~
+Line 92: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 93:     vite.config.ts:24:24:
+Line 94:       24 │       "@": path.resolve(import.meta.dirname, "client", "src"),
+Line 95:          ╵                         ~~~~~~~~~~~
+Line 96:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 97: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 98:     vite.config.ts:25:30:
+Line 99:       25 │       "@shared": path.resolve(import.meta.dirname, "shared"),
+Line 100:          ╵                               ~~~~~~~~~~~
+Line 101:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 102: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 103:     vite.config.ts:26:30:
+Line 104:       26 │ ...  "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+Line 105:          ╵                              ~~~~~~~~~~~
+Line 106:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 107: ✘ [ERROR] Top-level await is currently not supported with the "cjs" output format
+Line 108:     vite.config.ts:13:10:
+Line 109:       13 │           await import("@replit/vite-plugin-cartographer").then((m...
+Line 110:          ╵           ~~~~~
+Line 111: ✘ [ERROR] Top-level await is currently not supported with the "cjs" output format
+Line 112:     vite.config.ts:16:10:
+Line 113:       16 │           await import("@replit/vite-plugin-dev-banner").then((m) =>
+Line 114:          ╵           ~~~~~
+Line 115: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 116:     vite.config.ts:24:24:
+Line 117:       24 │       "@": path.resolve(import.meta.dirname, "client", "src"),
+Line 118:          ╵                         ~~~~~~~~~~~
+Line 119:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 120: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 121:     vite.config.ts:25:30:
+Line 122:       25 │       "@shared": path.resolve(import.meta.dirname, "shared"),
+Line 123:          ╵                               ~~~~~~~~~~~
+Line 124:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 125: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 126:     vite.config.ts:26:30:
+Line 127:       26 │ ...  "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+Line 128:          ╵                              ~~~~~~~~~~~
+Line 129:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 130: ✘ [ERROR] Could not resolve "@babel/preset-typescript/package.json"
+Line 131:     node_modules/@babel/core/lib/config/files/module-types.js:171:36:
+Line 132:       171 │ ...t packageJson = require("@babel/preset-typescript/package.json");
+Line 133:           ╵                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Line 134:   You can mark the path "@babel/preset-typescript/package.json" as external to exclude it from the bundle, which will remove thi
+Line 135: ✘ [ERROR] Could not resolve "@babel/preset-typescript/package.json"
+Line 136:     node_modules/@babel/core/lib/config/files/module-types.js:171:36:
+Line 137:       171 │ ...t packageJson = require("@babel/preset-typescript/package.json");
+Line 138:           ╵                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Line 139:   You can mark the path "@babel/preset-typescript/package.json" as external to exclude it from the bundle, which will remove thi
+Line 140: ✘ [ERROR] Could not resolve "../pkg"
+Line 141:     node_modules/lightningcss/node/index.js:17:27:
+Line 142:       17 │   module.exports = require(`../pkg`);
+Line 143:          ╵                            ~~~~~~~~
+Line 144: ✘ [ERROR] Could not resolve "../pkg"
+Line 145:     node_modules/lightningcss/node/index.js:17:27:
+Line 146:       17 │   module.exports = require(`../pkg`);
+Line 147:          ╵                            ~~~~~~~~
+Line 148: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 149:     vite.config.ts:29:21:
+Line 150:       29 │   root: path.resolve(import.meta.dirname, "client"),
+Line 151:          ╵                      ~~~~~~~~~~~
+Line 152:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 153: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 154:     vite.config.ts:31:25:
+Line 155:       31 │     outDir: path.resolve(import.meta.dirname, "dist/public"),
+Line 156:          ╵                          ~~~~~~~~~~~
+Line 157:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 158: ▲ [WARNING] "esbuild" should be marked as external for use with "require.resolve" [require-resolve-not-external]
+Line 159:     node_modules/vite/node_modules/esbuild/lib/main.js:1656:36:
+Line 160:       1656 │   const libMainJS = require.resolve("esbuild");
+Line 161:            ╵                                     ~~~~~~~~~
+Line 162: 6 of 8 warnings and all 4 errors shown (disable the message limit with --log-limit=0)
+Line 163: [91m[1m​[22m[39m
+Line 164: [91m[1mDependencies installation error                               [22m[39m
+Line 165: [91m[1m────────────────────────────────────────────────────────────────[22m[39m
+Line 166: ​
+Line 167:   [31m[1mError message[22m[39m
+Line 168:   A Netlify Function failed to require one of its dependencies.
+Line 169:   Please make sure it is present in the site's top-level "package.json".
+​
+Line 170:   Build failed with 4 errors:
+Line 171:   node_modules/@babel/core/lib/config/files/module-types.js:171:36: ERROR: Could not resolve "@babel/preset-typescript/package.j
+Line 172:   node_modules/lightningcss/node/index.js:17:27: ERROR: Could not resolve "../pkg"
+Line 173:   vite.config.ts:13:10: ERROR: Top-level await is currently not supported with the "cjs" output format
+Line 174:   vite.config.ts:16:10: ERROR: Top-level await is currently not supported with the "cjs" output format
+Line 175: ​
+Line 176:   [31m[1mResolved config[22m[39m
+Line 177:   build:
+Line 178:     command: npm install && npm run build
+Line 179:     commandOrigin: config
+Line 180:     environment:
+Line 181:       - NODE_VERSION
+Line 182:     publish: /opt/build/repo/dist/public
+Line 183:     publishOrigin: config
+Line 184:   functionsDirectory: /opt/build/repo/server
+Line 190:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 191: ▲ [WARNING] "import.meta" is not available with the "cjs" output format and will be empty [empty-import-meta]
+Line 192:     vite.config.ts:31:25:
+Line 193:       31 │     outDir: path.resolve(import.meta.dirname, "dist/public"),
+Line 194:          ╵                          ~~~~~~~~~~~
+Line 195:   You need to set the output format to "esm" for "import.meta" to work correctly.
+Line 196: ▲ [WARNING] "esbuild" should be marked as external for use with "require.resolve" [require-resolve-not-external]
+Line 197:     node_modules/vite/node_modules/esbuild/lib/main.js:1656:36:
+Line 198:       1656 │   const libMainJS = require.resolve("esbuild");
+Line 199:            ╵                                     ~~~~~~~~~
+Line 200: 6 of 8 warnings and all 4 errors shown (disable the message limit with --log-limit=0)
+Line 201: Build failed due to a user error: Build script returned non-zero exit code: 2
+Line 202: Failing build: Failed to build site
+Line 203: Finished processing build request in 20.688s
+Line 204: Failed during stage 'building site': Build script returned non-zero exit code: 2

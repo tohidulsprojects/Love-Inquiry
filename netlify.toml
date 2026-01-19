@@ -7,6 +7,8 @@
 
 [functions]
   directory = "server"
+  # Exclude dev files from bundling
+  ignored_node_modules = ["vite", "esbuild"]
 
 [[redirects]]
   from = "/api/*"
